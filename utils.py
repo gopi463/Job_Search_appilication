@@ -115,7 +115,7 @@ def clean_and_normalize_jobs(df: pd.DataFrame) -> pd.DataFrame:
             return amount * 12
         elif 'week' in interval_str:
             return amount * 52
-        elif 'day' in interval_str:
+        elif 'daily' in interval_str or 'day' in interval_str:
             return amount * 260
         elif 'hour' in interval_str:
             return amount * 2080  # 40 hours * 52 weeks
@@ -271,6 +271,6 @@ def generate_salary_distribution_chart(df: pd.DataFrame):
         legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5),
         barmode='overlay'
     )
-    fig.update_yaxes(title_text="", autorange="reverse")
+    fig.update_yaxes(title_text="", autorange="reversed")
     fig.update_xaxes(title_text="Annualized Salary (USD)", tickformat="$,.0f")
     return fig
