@@ -10,6 +10,11 @@ from utils import (
     generate_salary_distribution_chart
 )
 import io
+import database as db
+import config
+
+# Initialize SQLite database
+db.init_db()
 
 # ── Page Configuration ────────────────────────────────────────────────────────
 st.set_page_config(
@@ -251,500 +256,609 @@ def has_data():
     d = st.session_state['cleaned_jobs']
     return d is not None and isinstance(d, pd.DataFrame) and not d.empty
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
-st.sidebar.markdown("### ⚙️ Search Configuration")
 
-search_term = st.sidebar.text_input(
-    "Job Title / Keywords", value="Software Engineer",
-    placeholder="e.g. Python Developer"
-)
-location = st.sidebar.text_input(
-    "Location", value="Remote",
-    placeholder="e.g. San Francisco, CA or Remote"
-)
+def page_search():
+    # ── Sidebar ───────────────────────────────────────────────────────────────────
+    st.sidebar.markdown("### ⚙️ Search Configuration")
 
-SITE_MAP = {
-    "LinkedIn":     "linkedin",
-    "Indeed":       "indeed",
-    "Glassdoor":    "glassdoor",
-    "ZipRecruiter": "zip_recruiter",
-    "Google Jobs":  "google",
-    "Naukri":       "naukri",
-    "Bayt":         "bayt",
-    "BdJobs":       "bdjobs",
-}
-selected_sites = st.sidebar.multiselect(
-    "Job Boards / Domains to Scrape",
-    options=list(SITE_MAP.keys()),
-    default=["LinkedIn", "Indeed"],
-    help="LinkedIn and Indeed are highly responsive. Glassdoor, ZipRecruiter, and Google Jobs may require proxies or specific queries."
-)
-jobspy_sites = [SITE_MAP[s] for s in selected_sites]
+    search_term = st.sidebar.text_input(
+        "Job Title / Keywords", value="Software Engineer",
+        placeholder="e.g. Python Developer"
+    )
+    location = st.sidebar.text_input(
+        "Location", value="Remote",
+        placeholder="e.g. San Francisco, CA or Remote"
+    )
 
-age_option = st.sidebar.selectbox(
-    "Job Posting Age (Max)",
-    options=["Anytime", "Last 24 Hours", "Last 3 Days", "Last Week", "Last Month"],
-    index=0
-)
-AGE_MAP = {"Anytime": None, "Last 24 Hours": 24, "Last 3 Days": 72, "Last Week": 168, "Last Month": 720}
-hours_old = AGE_MAP[age_option]
+    SITE_MAP = {
+        "LinkedIn":     "linkedin",
+        "Indeed":       "indeed",
+        "Glassdoor":    "glassdoor",
+        "ZipRecruiter": "zip_recruiter",
+        "Google Jobs":  "google",
+        "Naukri":       "naukri",
+        "Bayt":         "bayt",
+        "BdJobs":       "bdjobs",
+    }
+    selected_sites = st.sidebar.multiselect(
+        "Job Boards / Domains to Scrape",
+        options=list(SITE_MAP.keys()),
+        default=["LinkedIn", "Indeed"],
+        help="LinkedIn and Indeed are highly responsive. Glassdoor, ZipRecruiter, and Google Jobs may require proxies or specific queries."
+    )
+    jobspy_sites = [SITE_MAP[s] for s in selected_sites]
 
-results_wanted = st.sidebar.slider("Results per Platform", min_value=5, max_value=100, value=15, step=5)
-
-# ── Advanced Settings — all variables defined before expander closes ──────────
-is_remote        = False
-country_indeed   = "usa"
-linkedin_fetch   = False
-proxies_list     = None
-
-with st.sidebar.expander("🛠️ Advanced Settings"):
-    is_remote = st.checkbox("Remote Jobs Only", value=False)
-
-    country_raw = st.selectbox(
-        "Indeed Country",
-        options=["USA", "UK", "Canada", "India", "Germany", "Australia", "France"],
+    age_option = st.sidebar.selectbox(
+        "Job Posting Age (Max)",
+        options=["Anytime", "Last 24 Hours", "Last 3 Days", "Last Week", "Last Month"],
         index=0
     )
-    country_indeed = country_raw.lower()
+    AGE_MAP = {"Anytime": None, "Last 24 Hours": 24, "Last 3 Days": 72, "Last Week": 168, "Last Month": 720}
+    hours_old = AGE_MAP[age_option]
 
-    linkedin_fetch = st.checkbox(
-        "Fetch Full LinkedIn Descriptions",
-        value=False,
-        help="Makes one extra request per job — much slower and risks rate-limits."
-    )
+    results_wanted = st.sidebar.slider("Results per Platform", min_value=5, max_value=100, value=15, step=5)
 
-    proxies_raw = st.text_area(
-        "HTTP/S Proxies (one per line, optional)",
-        placeholder="http://user:pass@host:port\nhttp://ip:port",
-        help="Helps bypass IP-based rate-limits on LinkedIn/Indeed."
-    )
-    if proxies_raw.strip():
-        proxies_list = [p.strip() for p in proxies_raw.splitlines() if p.strip()]
+    # ── Advanced Settings — all variables defined before expander closes ──────────
+    is_remote        = False
+    country_indeed   = "usa"
+    linkedin_fetch   = False
+    proxies_list     = None
 
-st.sidebar.markdown("---")
-scrape_clicked = st.sidebar.button("🚀 Start Scraping", type="primary", use_container_width=True)
+    with st.sidebar.expander("🛠️ Advanced Settings"):
+        is_remote = st.checkbox("Remote Jobs Only", value=False)
 
-# ── Scraper Execution ─────────────────────────────────────────────────────────
-if scrape_clicked:
-    if not jobspy_sites:
-        st.sidebar.error("❌ Select at least one job board.")
-    else:
-        st.session_state['scrape_status'] = ''
-        st.session_state['scrape_details'] = {}
-        status_box = st.empty()
-        
-        all_dfs = []
-        scrape_details = {}
-        
-        progress_text = st.empty()
-        
-        for idx, site in enumerate(jobspy_sites):
-            site_display = [k for k, v in SITE_MAP.items() if v == site][0]
-            progress_text.info(f"⏳ [{idx+1}/{len(jobspy_sites)}] Scraping **{site_display}** for '{search_term}'…")
-            
-            try:
-                # Build specific args for each site
-                site_args = {
-                    "site_name":       [site],
-                    "search_term":     search_term,
-                    "results_wanted":  results_wanted,
-                    "country_indeed":  country_indeed,
-                    "is_remote":       is_remote,
-                }
-                if location.strip():
-                    site_args["location"] = location.strip()
-                if hours_old is not None:
-                    site_args["hours_old"] = hours_old
-                if site == "linkedin":
-                    site_args["linkedin_fetch_description"] = linkedin_fetch
-                if proxies_list:
-                    site_args["proxies"] = proxies_list
+        country_raw = st.selectbox(
+            "Indeed Country",
+            options=["USA", "UK", "Canada", "India", "Germany", "Australia", "France"],
+            index=0
+        )
+        country_indeed = country_raw.lower()
 
-                import time
-                start_time = time.time()
-                site_df = scrape_jobs(**site_args)
-                duration = time.time() - start_time
+        linkedin_fetch = st.checkbox(
+            "Fetch Full LinkedIn Descriptions",
+            value=False,
+            help="Makes one extra request per job — much slower and risks rate-limits."
+        )
 
-                if site_df is not None and not site_df.empty:
-                    all_dfs.append(site_df)
-                    scrape_details[site_display] = {
-                        "status": "success",
-                        "count": len(site_df),
-                        "message": f"Retrieved {len(site_df)} jobs in {duration:.1f}s."
-                    }
-                else:
-                    scrape_details[site_display] = {
-                        "status": "warning",
-                        "count": 0,
-                        "message": "No listings found. The query might be too narrow, or anti-bot challenge was active."
-                    }
-            except Exception as exc:
-                err_str = str(exc)
-                if "403" in err_str or "forbidden" in err_str.lower():
-                    msg = "Blocked (403 Forbidden). Cloudflare protected - proxy required."
-                elif "429" in err_str or "too many requests" in err_str.lower():
-                    msg = "Rate limited (429 Too Many Requests). Try spacing out searches."
-                elif "406" in err_str or "not acceptable" in err_str.lower():
-                    msg = "Challenge active (406 Verification/reCAPTCHA required)."
-                else:
-                    msg = f"Failed: {err_str}"
-                
-                scrape_details[site_display] = {
-                    "status": "error",
-                    "count": 0,
-                    "message": msg
-                }
-            
-            # Short sleep to prevent heavy spikes
-            time.sleep(1.2)
-            
-        progress_text.empty()
-        st.session_state['scrape_details'] = scrape_details
+        proxies_raw = st.text_area(
+            "HTTP/S Proxies (one per line, optional)",
+            placeholder="http://user:pass@host:port\nhttp://ip:port",
+            help="Helps bypass IP-based rate-limits on LinkedIn/Indeed."
+        )
+        if proxies_raw.strip():
+            proxies_list = [p.strip() for p in proxies_raw.splitlines() if p.strip()]
 
-        if all_dfs:
-            raw_df = pd.concat(all_dfs, ignore_index=True)
-            st.session_state['raw_jobs']         = raw_df
-            st.session_state['cleaned_jobs']     = clean_and_normalize_jobs(raw_df)
-            st.session_state['selected_job_idx'] = st.session_state['cleaned_jobs'].index[0]
-            
-            success_list = [s for s, d in scrape_details.items() if d["status"] == "success"]
-            st.session_state['scrape_status']    = f"✅ Found **{len(raw_df)}** job listings from: {', '.join(success_list)}!"
+    st.sidebar.markdown("---")
+    scrape_clicked = st.sidebar.button("🚀 Start Scraping", type="primary", use_container_width=True)
+
+    # ── Scraper Execution ─────────────────────────────────────────────────────────
+    if scrape_clicked:
+        if not jobspy_sites:
+            st.sidebar.error("❌ Select at least one job board.")
         else:
-            st.session_state['raw_jobs']         = None
-            st.session_state['cleaned_jobs']     = None
-            st.session_state['selected_job_idx'] = None
-            st.session_state['scrape_status']    = "⚠️ No results found. All selected job boards returned empty or failed."
+            st.session_state['scrape_status'] = ''
+            st.session_state['scrape_details'] = {}
+            status_box = st.empty()
 
-        if st.session_state['scrape_status']:
-            msg = st.session_state['scrape_status']
-            if msg.startswith("✅"):
-                status_box.success(msg)
-            elif msg.startswith("⚠️"):
-                status_box.warning(msg)
+            all_dfs = []
+            scrape_details = {}
+
+            progress_text = st.empty()
+
+            for idx, site in enumerate(jobspy_sites):
+                site_display = [k for k, v in SITE_MAP.items() if v == site][0]
+                progress_text.info(f"⏳ [{idx+1}/{len(jobspy_sites)}] Scraping **{site_display}** for '{search_term}'…")
+
+                try:
+                    # Build specific args for each site
+                    site_args = {
+                        "site_name":       [site],
+                        "search_term":     search_term,
+                        "results_wanted":  results_wanted,
+                        "country_indeed":  country_indeed,
+                        "is_remote":       is_remote,
+                    }
+                    if location.strip():
+                        site_args["location"] = location.strip()
+                    if hours_old is not None:
+                        site_args["hours_old"] = hours_old
+                    if site == "linkedin":
+                        site_args["linkedin_fetch_description"] = linkedin_fetch
+                    if proxies_list:
+                        site_args["proxies"] = proxies_list
+
+                    import time
+                    start_time = time.time()
+                    site_df = scrape_jobs(**site_args)
+                    duration = time.time() - start_time
+
+                    if site_df is not None and not site_df.empty:
+                        all_dfs.append(site_df)
+                        scrape_details[site_display] = {
+                            "status": "success",
+                            "count": len(site_df),
+                            "message": f"Retrieved {len(site_df)} jobs in {duration:.1f}s."
+                        }
+                    else:
+                        scrape_details[site_display] = {
+                            "status": "warning",
+                            "count": 0,
+                            "message": "No listings found. The query might be too narrow, or anti-bot challenge was active."
+                        }
+                except Exception as exc:
+                    err_str = str(exc)
+                    if "403" in err_str or "forbidden" in err_str.lower():
+                        msg = "Blocked (403 Forbidden). Cloudflare protected - proxy required."
+                    elif "429" in err_str or "too many requests" in err_str.lower():
+                        msg = "Rate limited (429 Too Many Requests). Try spacing out searches."
+                    elif "406" in err_str or "not acceptable" in err_str.lower():
+                        msg = "Challenge active (406 Verification/reCAPTCHA required)."
+                    else:
+                        msg = f"Failed: {err_str}"
+
+                    scrape_details[site_display] = {
+                        "status": "error",
+                        "count": 0,
+                        "message": msg
+                    }
+
+                # Short sleep to prevent heavy spikes
+                time.sleep(1.2)
+
+            progress_text.empty()
+            st.session_state['scrape_details'] = scrape_details
+
+            if all_dfs:
+                raw_df = pd.concat(all_dfs, ignore_index=True)
+                st.session_state['raw_jobs']         = raw_df
+                st.session_state['cleaned_jobs']     = clean_and_normalize_jobs(raw_df)
+                st.session_state['selected_job_idx'] = st.session_state['cleaned_jobs'].index[0]
+
+                success_list = [s for s, d in scrape_details.items() if d["status"] == "success"]
+                st.session_state['scrape_status']    = f"✅ Found **{len(raw_df)}** job listings from: {', '.join(success_list)}!"
             else:
-                status_box.error(msg)
-                st.info("💡 Tip: Reduce results, deselect LinkedIn/Indeed, or add proxies.")
+                st.session_state['raw_jobs']         = None
+                st.session_state['cleaned_jobs']     = None
+                st.session_state['selected_job_idx'] = None
+                st.session_state['scrape_status']    = "⚠️ No results found. All selected job boards returned empty or failed."
 
-# ── Tabs ──────────────────────────────────────────────────────────────────────
-tab_search, tab_analytics, tab_guide = st.tabs([
-    "🔍 Job Board & Search",
-    "📊 Insights & Dashboard",
-    "📖 User Guide & Tips",
-])
-
-# ════════════════════════════════════════════════════════════════════════════════
-# TAB 1 — JOB BOARD & SEARCH
-# ════════════════════════════════════════════════════════════════════════════════
-with tab_search:
-    # ── Scrape Status Details Dashboard ───────────────────────────────────────
-    if st.session_state.get('scrape_details'):
-        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-        cols = st.columns(len(st.session_state['scrape_details']))
-        for col, (site, details) in zip(cols, st.session_state['scrape_details'].items()):
-            status = details["status"]
-            count = details["count"]
-            msg = details["message"]
-            
-            if status == "success":
-                border_color = "#10B981"  # Emerald
-                bg_gradient = "linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 78, 59, 0.3) 100%)"
-                status_badge = "🟢 Success"
-                badge_color = "#34D399"
-            elif status == "warning":
-                border_color = "#F59E0B"  # Amber
-                bg_gradient = "linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(120, 53, 4, 0.3) 100%)"
-                status_badge = "🟡 Empty"
-                badge_color = "#FBBF24"
-            else:  # error
-                border_color = "#EF4444"  # Rose
-                bg_gradient = "linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(127, 29, 29, 0.3) 100%)"
-                status_badge = "🔴 Blocked / Error"
-                badge_color = "#F87171"
-            
-            with col:
-                st.markdown(f"""
-                <div style="
-                    background: {bg_gradient};
-                    border: 1px solid {border_color};
-                    border-radius: 12px;
-                    padding: 1rem;
-                    height: 100%;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-                ">
-                    <div style="font-weight: 700; font-size: 1.1rem; color: #F1F5F9; margin-bottom: 0.25rem;">{site}</div>
-                    <div style="display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 4px; background: rgba(0,0,0,0.25); color: {badge_color}; margin-bottom: 0.5rem;">{status_badge}</div>
-                    <div style="font-size: 0.85rem; color: #CBD5E1; line-height: 1.3;">{msg}</div>
-                </div>
-                """, unsafe_allow_html=True)
-        st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
-
-    if not has_data():
-        st.markdown("""
-        <div style="text-align:center; padding:4rem 2rem; background:#1E293B;
-                    border-radius:16px; border:1px dashed #475569; margin-top:1rem;">
-            <h2 style="color:#94A3B8; font-weight:500;">No Search Results Yet</h2>
-            <p style="color:#64748B; font-size:1.05rem; max-width:480px; margin:.5rem auto 0 auto;">
-                Configure your search in the sidebar and click <b>🚀 Start Scraping</b>.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        df = st.session_state['cleaned_jobs']
-
-        # ── Metric cards ──────────────────────────────────────────────────────
-        total_jobs       = len(df)
-        # Safely count remote jobs (column may be object/bool/NaN)
-        remote_jobs      = df['is_remote'].apply(lambda v: bool(v) if pd.notna(v) else False).sum()
-        unique_companies = df['company'].nunique()
-
-        salary_df        = df[df['annual_avg'].notna()]
-        median_salary    = f"${salary_df['annual_avg'].median():,.0f}" if not salary_df.empty else "N/A"
-
-        mc1, mc2, mc3, mc4 = st.columns(4)
-        for col, title, val, color in [
-            (mc1, "Total Postings",    total_jobs,       "#38BDF8"),
-            (mc2, "Remote Listings",   remote_jobs,      "#C084FC"),
-            (mc3, "Unique Companies",  unique_companies, "#34D399"),
-            (mc4, "Median Salary",     median_salary,    "#FBBF24"),
-        ]:
-            with col:
-                st.markdown(f"""
-                <div class="metric-card">
-                    <p class="metric-title">{title}</p>
-                    <p class="metric-value" style="color:{color};">{val}</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-        st.write("---")
-
-        # ── Filter row + Export ───────────────────────────────────────────────
-        fc, ec = st.columns([3, 1])
-        with fc:
-            text_filter = st.text_input(
-                "🔎 Filter results (title · company · location · description)", "",
-                key="internal_filter"
-            )
-        with ec:
-            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-            csv_buf = io.StringIO()
-            df.to_csv(csv_buf, index=False)
-            xl_buf = io.BytesIO()
-            with pd.ExcelWriter(xl_buf, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='Jobs')
-            ex1, ex2 = st.columns(2)
-            slug = search_term.replace(' ', '_').lower()
-            with ex1:
-                st.download_button("📄 CSV",   csv_buf.getvalue(), f"jobs_{slug}.csv",
-                                   "text/csv", use_container_width=True)
-            with ex2:
-                st.download_button("📊 Excel", xl_buf.getvalue(),  f"jobs_{slug}.xlsx",
-                                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                   use_container_width=True)
-
-        # ── Apply text filter (NaN-safe) ──────────────────────────────────────
-        filtered_df = df.copy()
-        if text_filter.strip():
-            q = text_filter.strip().lower()
-            def safe_contains(series, q):
-                return series.fillna('').astype(str).str.lower().str.contains(q, na=False)
-            mask = (
-                safe_contains(filtered_df['title'],          q) |
-                safe_contains(filtered_df['company'],        q) |
-                safe_contains(filtered_df['clean_location'], q) |
-                safe_contains(filtered_df['description'],    q)
-            )
-            filtered_df = filtered_df[mask]
-
-        # ── Split view: listings table ← → detail panel ───────────────────────
-        left_col, right_col = st.columns([3, 2])
-
-        with left_col:
-            st.markdown("#### 📋 Job Listings")
-
-            if filtered_df.empty:
-                st.info("No listings matched your filter.")
-            else:
-                indices = filtered_df.index.tolist()
-
-                # Build display labels
-                def make_label(idx):
-                    r = filtered_df.loc[idx]
-                    return f"{r['title']}  |  {r['company']}  ({r['site_formatted']})"
-
-                labels = [make_label(i) for i in indices]
-
-                # Resolve current selection safely
-                cur = st.session_state['selected_job_idx']
-                if cur in indices:
-                    default_idx = indices.index(cur)
+            if st.session_state['scrape_status']:
+                msg = st.session_state['scrape_status']
+                if msg.startswith("✅"):
+                    status_box.success(msg)
+                elif msg.startswith("⚠️"):
+                    status_box.warning(msg)
                 else:
-                    default_idx = 0
+                    status_box.error(msg)
+                    st.info("💡 Tip: Reduce results, deselect LinkedIn/Indeed, or add proxies.")
 
-                chosen_label = st.selectbox(
-                    "Select a listing to view full details →",
-                    options=labels,
-                    index=default_idx,
-                    key="job_selector"
-                )
-                chosen_idx = indices[labels.index(chosen_label)]
-                st.session_state['selected_job_idx'] = chosen_idx
+    # ── Tabs ──────────────────────────────────────────────────────────────────────
+    tab_search, tab_analytics, tab_guide = st.tabs([
+        "🔍 Job Board & Search",
+        "📊 Insights & Dashboard",
+        "📖 User Guide & Tips",
+    ])
 
-                # Visible table columns
-                disp = filtered_df[[
-                    'site_formatted', 'title', 'company',
-                    'clean_location', 'clean_job_type', 'salary_display'
-                ]].copy()
-                disp.columns = ['Board', 'Title', 'Company', 'Location', 'Type', 'Salary']
-                st.dataframe(disp, use_container_width=True, height=440)
+    # ════════════════════════════════════════════════════════════════════════════════
+    # TAB 1 — JOB BOARD & SEARCH
+    # ════════════════════════════════════════════════════════════════════════════════
+    with tab_search:
+        # ── Scrape Status Details Dashboard ───────────────────────────────────────
+        if st.session_state.get('scrape_details'):
+            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+            cols = st.columns(len(st.session_state['scrape_details']))
+            for col, (site, details) in zip(cols, st.session_state['scrape_details'].items()):
+                status = details["status"]
+                count = details["count"]
+                msg = details["message"]
 
-        # ── Detail Panel ──────────────────────────────────────────────────────
-        with right_col:
-            st.markdown("#### 🗂️ Posting Details")
-            sel = st.session_state['selected_job_idx']
+                if status == "success":
+                    border_color = "#10B981"  # Emerald
+                    bg_gradient = "linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 78, 59, 0.3) 100%)"
+                    status_badge = "🟢 Success"
+                    badge_color = "#34D399"
+                elif status == "warning":
+                    border_color = "#F59E0B"  # Amber
+                    bg_gradient = "linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(120, 53, 4, 0.3) 100%)"
+                    status_badge = "🟡 Empty"
+                    badge_color = "#FBBF24"
+                else:  # error
+                    border_color = "#EF4444"  # Rose
+                    bg_gradient = "linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(127, 29, 29, 0.3) 100%)"
+                    status_badge = "🔴 Blocked / Error"
+                    badge_color = "#F87171"
 
-            if sel is not None and sel in df.index:
-                job = df.loc[sel]
-
-                # Header card
-                is_rem = bool(job['is_remote']) if pd.notna(job['is_remote']) else False
-                remote_badge = "<span class='badge badge-remote'>🏠 Remote</span>" if is_rem else ""
-                salary_val = str(job['salary_display']) if pd.notna(job.get('salary_display')) else 'N/A'
-
-                st.markdown(f"""
-                <div class="detail-card">
-                    <div class="detail-header">{job['title']}</div>
-                    <div class="detail-meta">
-                        🏢 <b>{job['company']}</b> &nbsp;·&nbsp; 📍 {job['clean_location']}
-                    </div>
-                    <div>
-                        <span class="badge badge-site">{job['site_formatted']}</span>
-                        <span class="badge badge-type">{job['clean_job_type']}</span>
-                        {remote_badge}
-                        <span class="badge badge-salary">💰 {salary_val}</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # "View original" button
-                job_url = str(job['job_url']) if pd.notna(job.get('job_url')) else ''
-                if job_url and job_url.startswith('http'):
-                    st.link_button(
-                        f"🌐 Open on {job['site_formatted']}",
-                        url=job_url,
-                        use_container_width=True,
-                        type="primary"
-                    )
-
-                # ── Description display ───────────────────────────────────────
-                st.markdown("**📄 Job Description:**")
-                raw_desc = job.get('description', '')
-
-                # Safely convert to string and check for real content
-                if raw_desc is None or (isinstance(raw_desc, float) and np.isnan(raw_desc)):
-                    desc = ''
-                else:
-                    desc = str(raw_desc).strip()
-
-                if desc and desc.lower() not in ('none', 'nan', 'n/a', ''):
-                    # Render as markdown (jobspy often returns markdown-formatted text)
-                    with st.container():
-                        st.markdown(
-                            f'<div class="detail-body">{desc}</div>',
-                            unsafe_allow_html=True
-                        )
-                else:
-                    st.markdown("""
-                    <div class="detail-body" style="color:#64748B; font-style:italic;
-                                text-align:center; padding:2rem 0;">
-                        No description available for this listing.<br><br>
-                        <b>Tips to get descriptions:</b><br>
-                        • Enable <i>Fetch Full LinkedIn Descriptions</i> for LinkedIn jobs<br>
-                        • Indeed &amp; ZipRecruiter usually include descriptions automatically<br>
-                        • Click "Open on [Board]" to view the full posting online
+                with col:
+                    st.markdown(f"""
+                    <div style="
+                        background: {bg_gradient};
+                        border: 1px solid {border_color};
+                        border-radius: 12px;
+                        padding: 1rem;
+                        height: 100%;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+                    ">
+                        <div style="font-weight: 700; font-size: 1.1rem; color: #F1F5F9; margin-bottom: 0.25rem;">{site}</div>
+                        <div style="display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 4px; background: rgba(0,0,0,0.25); color: {badge_color}; margin-bottom: 0.5rem;">{status_badge}</div>
+                        <div style="font-size: 0.85rem; color: #CBD5E1; line-height: 1.3;">{msg}</div>
                     </div>
                     """, unsafe_allow_html=True)
-            else:
-                st.info("Select a job from the dropdown above to see full details here.")
+            st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
 
-# ════════════════════════════════════════════════════════════════════════════════
-# TAB 2 — INSIGHTS & ANALYTICS
-# ════════════════════════════════════════════════════════════════════════════════
-with tab_analytics:
-    if not has_data():
+        if not has_data():
+            st.markdown("""
+            <div style="text-align:center; padding:4rem 2rem; background:#1E293B;
+                        border-radius:16px; border:1px dashed #475569; margin-top:1rem;">
+                <h2 style="color:#94A3B8; font-weight:500;">No Search Results Yet</h2>
+                <p style="color:#64748B; font-size:1.05rem; max-width:480px; margin:.5rem auto 0 auto;">
+                    Configure your search in the sidebar and click <b>🚀 Start Scraping</b>.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            df = st.session_state['cleaned_jobs']
+
+            # ── Metric cards ──────────────────────────────────────────────────────
+            total_jobs       = len(df)
+            # Safely count remote jobs (column may be object/bool/NaN)
+            remote_jobs      = df['is_remote'].apply(lambda v: bool(v) if pd.notna(v) else False).sum()
+            unique_companies = df['company'].nunique()
+
+            salary_df        = df[df['annual_avg'].notna()]
+            median_salary    = f"${salary_df['annual_avg'].median():,.0f}" if not salary_df.empty else "N/A"
+
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            for col, title, val, color in [
+                (mc1, "Total Postings",    total_jobs,       "#38BDF8"),
+                (mc2, "Remote Listings",   remote_jobs,      "#C084FC"),
+                (mc3, "Unique Companies",  unique_companies, "#34D399"),
+                (mc4, "Median Salary",     median_salary,    "#FBBF24"),
+            ]:
+                with col:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <p class="metric-title">{title}</p>
+                        <p class="metric-value" style="color:{color};">{val}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            st.write("---")
+
+            # ── Filter row + Export ───────────────────────────────────────────────
+            fc, ec = st.columns([3, 1])
+            with fc:
+                text_filter = st.text_input(
+                    "🔎 Filter results (title · company · location · description)", "",
+                    key="internal_filter"
+                )
+            with ec:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                csv_buf = io.StringIO()
+                df.to_csv(csv_buf, index=False)
+                xl_buf = io.BytesIO()
+                with pd.ExcelWriter(xl_buf, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name='Jobs')
+                ex1, ex2 = st.columns(2)
+                slug = search_term.replace(' ', '_').lower()
+                with ex1:
+                    st.download_button("📄 CSV",   csv_buf.getvalue(), f"jobs_{slug}.csv",
+                                       "text/csv", use_container_width=True)
+                with ex2:
+                    st.download_button("📊 Excel", xl_buf.getvalue(),  f"jobs_{slug}.xlsx",
+                                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                       use_container_width=True)
+
+            # ── Apply text filter (NaN-safe) ──────────────────────────────────────
+            filtered_df = df.copy()
+            if text_filter.strip():
+                q = text_filter.strip().lower()
+                def safe_contains(series, q):
+                    return series.fillna('').astype(str).str.lower().str.contains(q, na=False)
+                mask = (
+                    safe_contains(filtered_df['title'],          q) |
+                    safe_contains(filtered_df['company'],        q) |
+                    safe_contains(filtered_df['clean_location'], q) |
+                    safe_contains(filtered_df['description'],    q)
+                )
+                filtered_df = filtered_df[mask]
+
+            # ── Split view: listings table ← → detail panel ───────────────────────
+            left_col, right_col = st.columns([3, 2])
+
+            with left_col:
+                st.markdown("#### 📋 Job Listings")
+
+                if filtered_df.empty:
+                    st.info("No listings matched your filter.")
+                else:
+                    indices = filtered_df.index.tolist()
+
+                    # Build display labels
+                    def make_label(idx):
+                        r = filtered_df.loc[idx]
+                        return f"{r['title']}  |  {r['company']}  ({r['site_formatted']})"
+
+                    labels = [make_label(i) for i in indices]
+
+                    # Resolve current selection safely
+                    cur = st.session_state['selected_job_idx']
+                    if cur in indices:
+                        default_idx = indices.index(cur)
+                    else:
+                        default_idx = 0
+
+                    chosen_label = st.selectbox(
+                        "Select a listing to view full details →",
+                        options=labels,
+                        index=default_idx,
+                        key="job_selector"
+                    )
+                    chosen_idx = indices[labels.index(chosen_label)]
+                    st.session_state['selected_job_idx'] = chosen_idx
+
+                    # Visible table columns
+                    disp = filtered_df[[
+                        'site_formatted', 'title', 'company',
+                        'clean_location', 'clean_job_type', 'salary_display'
+                    ]].copy()
+                    disp.columns = ['Board', 'Title', 'Company', 'Location', 'Type', 'Salary']
+                    st.dataframe(disp, use_container_width=True, height=440)
+
+            # ── Detail Panel ──────────────────────────────────────────────────────
+            with right_col:
+                st.markdown("#### 🗂️ Posting Details")
+                sel = st.session_state['selected_job_idx']
+
+                if sel is not None and sel in df.index:
+                    job = df.loc[sel]
+
+                    # Header card
+                    is_rem = bool(job['is_remote']) if pd.notna(job['is_remote']) else False
+                    remote_badge = "<span class='badge badge-remote'>🏠 Remote</span>" if is_rem else ""
+                    salary_val = str(job['salary_display']) if pd.notna(job.get('salary_display')) else 'N/A'
+
+                    st.markdown(f"""
+                    <div class="detail-card">
+                        <div class="detail-header">{job['title']}</div>
+                        <div class="detail-meta">
+                            🏢 <b>{job['company']}</b> &nbsp;·&nbsp; 📍 {job['clean_location']}
+                        </div>
+                        <div>
+                            <span class="badge badge-site">{job['site_formatted']}</span>
+                            <span class="badge badge-type">{job['clean_job_type']}</span>
+                            {remote_badge}
+                            <span class="badge badge-salary">💰 {salary_val}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    # "View original" button
+                    job_url = str(job['job_url']) if pd.notna(job.get('job_url')) else ''
+                    if job_url and job_url.startswith('http'):
+                        st.link_button(
+                            f"🌐 Open on {job['site_formatted']}",
+                            url=job_url,
+                            use_container_width=True,
+                            type="primary"
+                        )
+
+                    # ── Description display ───────────────────────────────────────
+                    st.markdown("**📄 Job Description:**")
+                    raw_desc = job.get('description', '')
+
+                    # Safely convert to string and check for real content
+                    if raw_desc is None or (isinstance(raw_desc, float) and np.isnan(raw_desc)):
+                        desc = ''
+                    else:
+                        desc = str(raw_desc).strip()
+
+                    if desc and desc.lower() not in ('none', 'nan', 'n/a', ''):
+                        # Render as markdown (jobspy often returns markdown-formatted text)
+                        with st.container():
+                            st.markdown(
+                                f'<div class="detail-body">{desc}</div>',
+                                unsafe_allow_html=True
+                            )
+                    else:
+                        st.markdown("""
+                        <div class="detail-body" style="color:#64748B; font-style:italic;
+                                    text-align:center; padding:2rem 0;">
+                            No description available for this listing.<br><br>
+                            <b>Tips to get descriptions:</b><br>
+                            • Enable <i>Fetch Full LinkedIn Descriptions</i> for LinkedIn jobs<br>
+                            • Indeed &amp; ZipRecruiter usually include descriptions automatically<br>
+                            • Click "Open on [Board]" to view the full posting online
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("Select a job from the dropdown above to see full details here.")
+
+    # ════════════════════════════════════════════════════════════════════════════════
+    # TAB 2 — INSIGHTS & ANALYTICS
+    # ════════════════════════════════════════════════════════════════════════════════
+    with tab_analytics:
+        if not has_data():
+            st.markdown("""
+            <div style="text-align:center; padding:4rem 2rem; background:#1E293B;
+                        border-radius:16px; border:1px dashed #475569; margin-top:1rem;">
+                <h2 style="color:#94A3B8; font-weight:500;">No Data to Visualize</h2>
+                <p style="color:#64748B; font-size:1.05rem; max-width:480px; margin:.5rem auto 0 auto;">
+                    Analytics charts will appear here after a successful scrape.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            adf = st.session_state['cleaned_jobs']
+            st.markdown("### 📊 Market Intelligence Dashboard")
+
+            r1c1, r1c2 = st.columns(2)
+            r2c1, r2c2 = st.columns(2)
+
+            with r1c1:
+                st.plotly_chart(generate_site_distribution_chart(adf),  use_container_width=True)
+            with r1c2:
+                st.plotly_chart(generate_top_companies_chart(adf, 10),   use_container_width=True)
+            with r2c1:
+                st.plotly_chart(generate_job_type_chart(adf),            use_container_width=True)
+            with r2c2:
+                sal_fig = generate_salary_distribution_chart(adf)
+                if sal_fig:
+                    st.plotly_chart(sal_fig, use_container_width=True)
+                else:
+                    st.markdown("""
+                    <div style="border:1px solid #334155; border-radius:12px; height:350px;
+                                display:flex; flex-direction:column; justify-content:center;
+                                align-items:center; background:#1E293B; padding:2rem;">
+                        <h4 style="color:#94A3B8; margin:0; text-align:center;">No Salary Data</h4>
+                        <p style="color:#64748B; font-size:.88rem; text-align:center;
+                                  max-width:300px; margin-top:.5rem;">
+                            Most listings don't publish salary ranges. Try Indeed or ZipRecruiter
+                            which tend to include more compensation details.
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+    # ════════════════════════════════════════════════════════════════════════════════
+    # TAB 3 — USER GUIDE
+    # ════════════════════════════════════════════════════════════════════════════════
+    with tab_guide:
         st.markdown("""
-        <div style="text-align:center; padding:4rem 2rem; background:#1E293B;
-                    border-radius:16px; border:1px dashed #475569; margin-top:1rem;">
-            <h2 style="color:#94A3B8; font-weight:500;">No Data to Visualize</h2>
-            <p style="color:#64748B; font-size:1.05rem; max-width:480px; margin:.5rem auto 0 auto;">
-                Analytics charts will appear here after a successful scrape.
-            </p>
+        ### 📖 User Guide & Scraping Tips
+
+        #### ⚙️ Input Reference
+
+        | Field | Description |
+        |---|---|
+        | **Job Title / Keywords** | Role or tech stack (e.g. `Data Engineer`, `React Developer`) |
+        | **Location** | City, state, country, or `Remote` |
+        | **Job Boards** | Platforms to search — select multiple for broad coverage |
+        | **Job Posting Age** | Only return jobs posted within the selected window |
+        | **Results per Platform** | How many listings to request *from each* selected board |
+        | **Remote Jobs Only** | Filters to remote-flagged postings only |
+        | **Fetch Full LinkedIn Descriptions** | Slower but retrieves full description text |
+
+        #### 🗂️ About Job Descriptions
+        - **Indeed / ZipRecruiter / Google Jobs** usually return descriptions automatically.
+        - **LinkedIn** only returns a snippet by default — enable *Fetch Full LinkedIn Descriptions* to get full text (slower).
+        - **Glassdoor** may return partial descriptions depending on scraper access.
+        - If no description appears, click **"Open on [Board]"** to read the full posting directly.
+
+        #### 🛡️ Dealing with Rate Limits (Empty Results / 403 Errors)
+
+        - **Lower your results count** — start with 10–15 results per platform.
+        - **Avoid LinkedIn / Indeed initially** — try Google Jobs or ZipRecruiter first.
+        - **Use proxies** — add HTTP/S proxies in Advanced Settings to rotate IPs.
+        - **Space out your searches** — wait a few minutes between scrapes.
+        - **Try different locations** — some boards block requests that look too broad.
+
+        #### 📤 Exporting Results
+        Use the **CSV** and **Excel** download buttons in the Job Board tab to export all scraped listings.
+        """)
+
+
+
+
+def render_sidebar():
+    st.sidebar.markdown("### 🧭 Navigation")
+    nav_items = [
+        ("search", "🔍", "Job Search"),
+        ("developer", "👨💻", "Developer"),
+    ]
+    if "current_page" not in st.session_state:
+        st.session_state["current_page"] = "search"
+        
+    for page_id, icon, label in nav_items:
+        is_active = st.session_state["current_page"] == page_id
+        btn_label = f"{icon} {label}"
+        if st.sidebar.button(btn_label, key=f"nav_{page_id}", use_container_width=True, type="primary" if is_active else "secondary"):
+            st.session_state["current_page"] = page_id
+            st.rerun()
+            
+    return st.session_state["current_page"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ██████████████████████ PAGE: DEVELOPER ███████████████████████████████████████
+# ──────────────────────────────────────────────────────────────────────────────
+def page_developer():
+    import uuid
+    import streamlit as st
+    import database as db  # Make sure this matches your DB import
+    import utils  # Make sure this matches your helper styling utility
+    utils.section_header("👨💻 Developer Profile", "Learn more about the creator of this platform")
+    col_profile, col_form = st.columns([1, 1])
+    with col_profile:
+        # Glassmorphic Profile Card
+        st.markdown(f"""
+        <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+            border-radius:15px;padding:24px;text-align:center;box-shadow:0 8px 32px 0 rgba(0,0,0,0.37);">
+            <div style="font-size:5rem;margin-bottom:12px;">👨💻</div>
+            <h2 style="margin:0;color:#e6edf3;font-size:1.8rem;">Gopi Chand Pasam</h2>
+            <p style="color:#667eea;font-weight:600;margin:4px 0 16px 0;font-size:1.1rem;">Full Stack AI & RAG Engineer</p>
+            <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1);margin:16px 0;">
+            <div style="text-align:left;color:#e6edf3;font-size:0.9rem;">
+                <p>🚀 <strong>Specialization:</strong> Building highly optimized Retrieval-Augmented Generation (RAG) pipelines, analytical assistants, and secure enterprise web apps.</p>
+                <p>🛠️ <strong>Core Stack:</strong> Python · Streamlit · Groq API · FAISS · BM25 · SQLite · Pytest · pandas · Plotly</p>
+                <p>📬 <strong>Email:</strong> <a href="mailto:gopipasam93@gmail.com" style="color:#667eea;text-decoration:none;">gopipasam93@gmail.com</a></p>
+            </div>
+            <div style="display:flex;justify-content:center;gap:15px;margin-top:20px;">
+                <a href="https://github.com/gopi463" target="_blank" style="text-decoration:none;
+                    background:#24292e;color:white;padding:8px 16px;border-radius:8px;font-weight:600;font-size:0.85rem;">
+                    🐙 GitHub Profile
+                </a>
+                <a href="https://linkedin.com" target="_blank" style="text-decoration:none;
+                    background:#0a66c2;color:white;padding:8px 16px;border-radius:8px;font-weight:600;font-size:0.85rem;">
+                    💼 LinkedIn Profile
+                </a>
+            </div>
         </div>
         """, unsafe_allow_html=True)
-    else:
-        adf = st.session_state['cleaned_jobs']
-        st.markdown("### 📊 Market Intelligence Dashboard")
+        st.markdown("")
+        st.markdown("### 🌟 About the Project")
+        st.markdown(
+            "This application showcases advanced integration of data parsing, indexing, and interactive chat. "
+            "It utilizes optimal caching strategies, high-fidelity visualization cards, and secure data storage schemas."
+        )
+    with col_form:
+        st.markdown("### ✉️ Get in Touch / Hire Me")
+        st.markdown("Are you a recruiter or looking for a freelancer? Send an inquiry directly through this app form!")
+        with st.form("recruiter_form"):
+            name = st.text_input("Name *", placeholder="Enter your name")
+            company = st.text_input("Company", placeholder="Enter your company")
+            email = st.text_input("Email *", placeholder="Enter your contact email")
+            message = st.text_area("Message *", placeholder="Briefly describe the role, project, or why you are reaching out...")
+            
+            submitted = st.form_submit_button("🚀 Send Message", type="primary", use_container_width=True)
+            if submitted:
+                if not name or not email or not message:
+                    st.error("⚠️ Please fill in all required fields (*) before sending.")
+                else:
+                    db.save_inquiry(name, company, email, message)
+                    st.success("✅ Inquiry sent successfully! The developer has been notified.")
+                    st.toast("Message sent!", icon="✉️")
+        # Inquiries Panel (displays all messages stored in the local SQLite DB)
+        inquiries = db.get_inquiries()
+        if inquiries:
+            with st.expander(f"📥 Incoming Inquiries Dashboard ({len(inquiries)})", expanded=False):
+                st.info("💡 All recruiter messages sent through the contact form are stored in the SQLite DB and listed here for easy follow-up.")
+                for inq in inquiries:
+                    st.markdown(f"""
+                    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
+                        border-radius:10px;padding:12px;margin-bottom:10px;">
+                        <div style="display:flex;justify-content:between;font-size:0.75rem;color:#8892a4;margin-bottom:4px;">
+                            <strong>From: {inq['name']} ({inq['company'] or 'Independent'})</strong>
+                            <span style="margin-left:auto;">{inq['created_at'][:16]}</span>
+                        </div>
+                        <div style="font-size:0.8rem;color:#c8d4ff;margin-bottom:4px;">📧 {inq['email']}</div>
+                        <div style="font-size:0.85rem;color:#e6edf3;white-space:pre-wrap;">{inq['message']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-        r1c1, r1c2 = st.columns(2)
-        r2c1, r2c2 = st.columns(2)
+PAGE_ROUTER = {
+    "search": page_search,
+    "developer": page_developer,
+}
 
-        with r1c1:
-            st.plotly_chart(generate_site_distribution_chart(adf),  use_container_width=True)
-        with r1c2:
-            st.plotly_chart(generate_top_companies_chart(adf, 10),   use_container_width=True)
-        with r2c1:
-            st.plotly_chart(generate_job_type_chart(adf),            use_container_width=True)
-        with r2c2:
-            sal_fig = generate_salary_distribution_chart(adf)
-            if sal_fig:
-                st.plotly_chart(sal_fig, use_container_width=True)
-            else:
-                st.markdown("""
-                <div style="border:1px solid #334155; border-radius:12px; height:350px;
-                            display:flex; flex-direction:column; justify-content:center;
-                            align-items:center; background:#1E293B; padding:2rem;">
-                    <h4 style="color:#94A3B8; margin:0; text-align:center;">No Salary Data</h4>
-                    <p style="color:#64748B; font-size:.88rem; text-align:center;
-                              max-width:300px; margin-top:.5rem;">
-                        Most listings don't publish salary ranges. Try Indeed or ZipRecruiter
-                        which tend to include more compensation details.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-
-# ════════════════════════════════════════════════════════════════════════════════
-# TAB 3 — USER GUIDE
-# ════════════════════════════════════════════════════════════════════════════════
-with tab_guide:
-    st.markdown("""
-    ### 📖 User Guide & Scraping Tips
-
-    #### ⚙️ Input Reference
-
-    | Field | Description |
-    |---|---|
-    | **Job Title / Keywords** | Role or tech stack (e.g. `Data Engineer`, `React Developer`) |
-    | **Location** | City, state, country, or `Remote` |
-    | **Job Boards** | Platforms to search — select multiple for broad coverage |
-    | **Job Posting Age** | Only return jobs posted within the selected window |
-    | **Results per Platform** | How many listings to request *from each* selected board |
-    | **Remote Jobs Only** | Filters to remote-flagged postings only |
-    | **Fetch Full LinkedIn Descriptions** | Slower but retrieves full description text |
-
-    #### 🗂️ About Job Descriptions
-    - **Indeed / ZipRecruiter / Google Jobs** usually return descriptions automatically.
-    - **LinkedIn** only returns a snippet by default — enable *Fetch Full LinkedIn Descriptions* to get full text (slower).
-    - **Glassdoor** may return partial descriptions depending on scraper access.
-    - If no description appears, click **"Open on [Board]"** to read the full posting directly.
-
-    #### 🛡️ Dealing with Rate Limits (Empty Results / 403 Errors)
-
-    - **Lower your results count** — start with 10–15 results per platform.
-    - **Avoid LinkedIn / Indeed initially** — try Google Jobs or ZipRecruiter first.
-    - **Use proxies** — add HTTP/S proxies in Advanced Settings to rotate IPs.
-    - **Space out your searches** — wait a few minutes between scrapes.
-    - **Try different locations** — some boards block requests that look too broad.
-
-    #### 📤 Exporting Results
-    Use the **CSV** and **Excel** download buttons in the Job Board tab to export all scraped listings.
-    """)
-
+# Main execution flow
+current_page = render_sidebar()
+if current_page in PAGE_ROUTER:
+    PAGE_ROUTER[current_page]()

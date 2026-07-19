@@ -33,3 +33,7 @@ Thumbs.db
 # Data / output files
 *.csv
 *.xlsx
+
+# Database
+*.db
+
