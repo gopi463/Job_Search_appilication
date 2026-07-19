@@ -115,7 +115,7 @@ def clean_and_normalize_jobs(df: pd.DataFrame) -> pd.DataFrame:
             return amount * 12
         elif 'week' in interval_str:
             return amount * 52
-        elif 'daily' in interval_str or 'day' in interval_str:
+        elif 'day' in interval_str:
             return amount * 260
         elif 'hour' in interval_str:
             return amount * 2080  # 40 hours * 52 weeks

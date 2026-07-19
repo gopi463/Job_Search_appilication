@@ -22,131 +22,208 @@ st.set_page_config(
 # ── Premium CSS ───────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap');
 
+/* Apply modern base styles */
 html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    color: #F1F5F9;
 }
 
-/* Dark background override */
+/* Deep Space Premium Dark Background */
 .stApp {
-    background: #0A0F1E;
+    background: radial-gradient(circle at 50% 0%, #1E1B4B 0%, #0B0F19 60%, #05070F 100%);
+    background-attachment: fixed;
 }
 
-/* Header */
+/* Premium Glassmorphic Header Container */
 .header-container {
-    background: linear-gradient(135deg, #1E1B4B 0%, #311042 55%, #0F172A 100%);
-    padding: 2.5rem 2.8rem;
-    border-radius: 18px;
-    border: 1px solid rgba(139, 92, 246, 0.3);
-    margin-bottom: 1.5rem;
-    box-shadow: 0 0 40px rgba(139, 92, 246, 0.15);
+    background: linear-gradient(135deg, rgba(30, 27, 75, 0.45) 0%, rgba(49, 16, 66, 0.45) 50%, rgba(15, 23, 42, 0.45) 100%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 2.2rem 2.5rem;
+    border-radius: 20px;
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+    position: relative;
+    overflow: hidden;
 }
+
+.header-container::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(167, 139, 250, 0.08) 0%, transparent 60%);
+    pointer-events: none;
+}
+
 .header-title {
-    font-family: 'Outfit', 'Inter', sans-serif;
+    font-family: 'Outfit', sans-serif;
     font-weight: 800;
-    font-size: 2.6rem;
+    font-size: 2.8rem;
     color: #F8FAFC;
     margin: 0;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
+    background: linear-gradient(to right, #FFFFFF 30%, #C084FC 80%, #6366F1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
+
 .header-subtitle {
     color: #C084FC;
-    font-size: 1.05rem;
-    margin-top: 0.4rem;
+    font-size: 1.1rem;
+    margin-top: 0.5rem;
     margin-bottom: 0;
     font-weight: 400;
-    opacity: 0.88;
+    opacity: 0.9;
+    letter-spacing: 0.02em;
 }
 
-/* Metric Cards */
+/* Premium Glassmorphic Metric Cards */
 .metric-card {
-    background: linear-gradient(145deg, #1E293B, #162032);
-    padding: 1.25rem 1rem;
-    border-radius: 14px;
-    border: 1px solid #334155;
+    background: rgba(30, 41, 59, 0.35);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 1.5rem 1.2rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
     text-align: center;
-    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05);
 }
+
 .metric-card:hover {
-    transform: translateY(-3px);
-    border-color: #6366F1;
-    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.2);
+    transform: translateY(-5px);
+    border-color: rgba(99, 102, 241, 0.4);
+    box-shadow: 0 12px 30px rgba(99, 102, 241, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.1);
 }
+
 .metric-title {
     color: #94A3B8;
-    font-size: 0.78rem;
-    font-weight: 600;
+    font-size: 0.8rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     margin: 0;
 }
+
 .metric-value {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-top: 0.4rem;
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin-top: 0.5rem;
     margin-bottom: 0;
     line-height: 1.1;
+    font-family: 'Outfit', sans-serif;
 }
 
-/* Detail Card */
+/* Detail Card Styling */
 .detail-card {
-    background: #1E293B;
-    padding: 1.4rem;
-    border-radius: 14px;
-    border: 1px solid #334155;
-    margin-bottom: 0.8rem;
-}
-.detail-header {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #F1F5F9;
-    margin-bottom: 0.2rem;
-    line-height: 1.3;
-}
-.detail-meta {
-    font-size: 0.88rem;
-    color: #94A3B8;
-    margin-bottom: 0.8rem;
+    background: rgba(30, 41, 59, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 1.6rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
 
-/* Badges */
+.detail-header {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #F8FAFC;
+    margin-bottom: 0.3rem;
+    line-height: 1.3;
+    font-family: 'Outfit', sans-serif;
+}
+
+.detail-meta {
+    font-size: 0.95rem;
+    color: #94A3B8;
+    margin-bottom: 1rem;
+}
+
+/* Badges with neon hues */
 .badge {
     display: inline-block;
-    padding: 0.28em 0.65em;
-    font-size: 0.72rem;
+    padding: 0.35em 0.8em;
+    font-size: 0.75rem;
     font-weight: 700;
-    border-radius: 6px;
-    margin-right: 0.4rem;
-    margin-bottom: 0.3rem;
+    border-radius: 8px;
+    margin-right: 0.5rem;
+    margin-bottom: 0.4rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    letter-spacing: 0.01em;
 }
-.badge-site   { background-color: #2563EB; color: white; }
-.badge-type   { background-color: #059669; color: white; }
-.badge-remote { background-color: #7C3AED; color: white; }
-.badge-salary { background-color: #D97706; color: white; }
+.badge-site   { background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%); color: #F1F5F9; border: 1px solid rgba(59, 130, 246, 0.3); }
+.badge-type   { background: linear-gradient(135deg, #047857 0%, #065F46 100%); color: #F1F5F9; border: 1px solid rgba(16, 185, 129, 0.3); }
+.badge-remote { background: linear-gradient(135deg, #6D28D9 0%, #5B21B6 100%); color: #F1F5F9; border: 1px solid rgba(139, 92, 246, 0.3); }
+.badge-salary { background: linear-gradient(135deg, #B45309 0%, #92400E 100%); color: #F1F5F9; border: 1px solid rgba(245, 158, 11, 0.3); }
 
-/* Description box */
+/* Description Scrollbox */
 .detail-body {
-    font-size: 0.9rem;
-    color: #CBD5E1;
-    line-height: 1.65;
-    background: #0F172A;
-    padding: 1rem 1.1rem;
-    border-radius: 10px;
-    border: 1px solid #1E293B;
-    max-height: 420px;
+    font-size: 0.95rem;
+    color: #E2E8F0;
+    line-height: 1.7;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 1.2rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    max-height: 440px;
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-word;
 }
 
-/* Divider */
-hr { border-color: #1E293B; }
+/* Custom Scrollbar for detail body */
+.detail-body::-webkit-scrollbar {
+    width: 6px;
+}
+.detail-body::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+}
+.detail-body::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.4);
+    border-radius: 3px;
+}
+.detail-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 92, 246, 0.6);
+}
 
-/* Sidebar tweaks */
+/* Divider styling */
+hr { border-color: rgba(255, 255, 255, 0.08); }
+
+/* Sidebar Premium styling */
 section[data-testid="stSidebar"] {
-    background: #0D1526;
-    border-right: 1px solid #1E293B;
+    background: #090D1A;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Premium tab selection styles */
+button[data-baseweb="tab"] {
+    font-family: 'Outfit', sans-serif !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    color: #94A3B8 !important;
+    transition: all 0.2s ease !important;
+}
+button[data-baseweb="tab"]:hover {
+    color: #C084FC !important;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: #F8FAFC !important;
+    border-bottom-color: #8B5CF6 !important;
+}
+
+/* Streamlit Native Expander styling override */
+.streamlit-expanderHeader {
+    background-color: rgba(30, 41, 59, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-radius: 8px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -155,7 +232,7 @@ section[data-testid="stSidebar"] {
 st.markdown("""
 <div class="header-container">
     <h1 class="header-title">🔍 JobSpy Intelligence Center</h1>
-    <p class="header-subtitle">Aggregate, analyze, and explore job postings from LinkedIn, Indeed, Glassdoor, ZipRecruiter &amp; Google Jobs in real time.</p>
+    <p class="header-subtitle">Aggregate, analyze, and explore job postings from LinkedIn, Indeed, Glassdoor, ZipRecruiter, Google Jobs &amp; more in real time.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -165,6 +242,7 @@ for key, default in [
     ('cleaned_jobs',    None),
     ('selected_job_idx', None),
     ('scrape_status',   ''),
+    ('scrape_details',  None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -191,12 +269,15 @@ SITE_MAP = {
     "Glassdoor":    "glassdoor",
     "ZipRecruiter": "zip_recruiter",
     "Google Jobs":  "google",
+    "Naukri":       "naukri",
+    "Bayt":         "bayt",
+    "BdJobs":       "bdjobs",
 }
 selected_sites = st.sidebar.multiselect(
     "Job Boards / Domains to Scrape",
     options=list(SITE_MAP.keys()),
-    default=["Indeed", "ZipRecruiter", "Google Jobs"],
-    help="LinkedIn and Indeed may block without proxies. Google Jobs is most reliable."
+    default=["LinkedIn", "Indeed"],
+    help="LinkedIn and Indeed are highly responsive. Glassdoor, ZipRecruiter, and Google Jobs may require proxies or specific queries."
 )
 jobspy_sites = [SITE_MAP[s] for s in selected_sites]
 
@@ -249,44 +330,90 @@ if scrape_clicked:
         st.sidebar.error("❌ Select at least one job board.")
     else:
         st.session_state['scrape_status'] = ''
+        st.session_state['scrape_details'] = {}
         status_box = st.empty()
-
-        with st.spinner(f"⏳ Scraping **{search_term}** in **{location}** across {', '.join(selected_sites)}…"):
+        
+        all_dfs = []
+        scrape_details = {}
+        
+        progress_text = st.empty()
+        
+        for idx, site in enumerate(jobspy_sites):
+            site_display = [k for k, v in SITE_MAP.items() if v == site][0]
+            progress_text.info(f"⏳ [{idx+1}/{len(jobspy_sites)}] Scraping **{site_display}** for '{search_term}'…")
+            
             try:
-                scrape_args = {
-                    "site_name":       jobspy_sites,
+                # Build specific args for each site
+                site_args = {
+                    "site_name":       [site],
                     "search_term":     search_term,
                     "results_wanted":  results_wanted,
                     "country_indeed":  country_indeed,
                     "is_remote":       is_remote,
                 }
                 if location.strip():
-                    scrape_args["location"] = location.strip()
+                    site_args["location"] = location.strip()
                 if hours_old is not None:
-                    scrape_args["hours_old"] = hours_old
-                if "linkedin" in jobspy_sites:
-                    scrape_args["linkedin_fetch_description"] = linkedin_fetch
+                    site_args["hours_old"] = hours_old
+                if site == "linkedin":
+                    site_args["linkedin_fetch_description"] = linkedin_fetch
                 if proxies_list:
-                    scrape_args["proxies"] = proxies_list
+                    site_args["proxies"] = proxies_list
 
-                raw_df = scrape_jobs(**scrape_args)
+                import time
+                start_time = time.time()
+                site_df = scrape_jobs(**site_args)
+                duration = time.time() - start_time
 
-                if raw_df is not None and not raw_df.empty:
-                    st.session_state['raw_jobs']         = raw_df
-                    st.session_state['cleaned_jobs']     = clean_and_normalize_jobs(raw_df)
-                    st.session_state['selected_job_idx'] = st.session_state['cleaned_jobs'].index[0]
-                    st.session_state['scrape_status']    = f"✅ Found **{len(raw_df)}** job listings!"
+                if site_df is not None and not site_df.empty:
+                    all_dfs.append(site_df)
+                    scrape_details[site_display] = {
+                        "status": "success",
+                        "count": len(site_df),
+                        "message": f"Retrieved {len(site_df)} jobs in {duration:.1f}s."
+                    }
                 else:
-                    st.session_state['raw_jobs']         = None
-                    st.session_state['cleaned_jobs']     = None
-                    st.session_state['selected_job_idx'] = None
-                    st.session_state['scrape_status']    = "⚠️ No results found. Try different keywords or locations."
-
+                    scrape_details[site_display] = {
+                        "status": "warning",
+                        "count": 0,
+                        "message": "No listings found. The query might be too narrow, or anti-bot challenge was active."
+                    }
             except Exception as exc:
-                st.session_state['raw_jobs']         = None
-                st.session_state['cleaned_jobs']     = None
-                st.session_state['selected_job_idx'] = None
-                st.session_state['scrape_status']    = f"❌ Error: {exc}"
+                err_str = str(exc)
+                if "403" in err_str or "forbidden" in err_str.lower():
+                    msg = "Blocked (403 Forbidden). Cloudflare protected - proxy required."
+                elif "429" in err_str or "too many requests" in err_str.lower():
+                    msg = "Rate limited (429 Too Many Requests). Try spacing out searches."
+                elif "406" in err_str or "not acceptable" in err_str.lower():
+                    msg = "Challenge active (406 Verification/reCAPTCHA required)."
+                else:
+                    msg = f"Failed: {err_str}"
+                
+                scrape_details[site_display] = {
+                    "status": "error",
+                    "count": 0,
+                    "message": msg
+                }
+            
+            # Short sleep to prevent heavy spikes
+            time.sleep(1.2)
+            
+        progress_text.empty()
+        st.session_state['scrape_details'] = scrape_details
+
+        if all_dfs:
+            raw_df = pd.concat(all_dfs, ignore_index=True)
+            st.session_state['raw_jobs']         = raw_df
+            st.session_state['cleaned_jobs']     = clean_and_normalize_jobs(raw_df)
+            st.session_state['selected_job_idx'] = st.session_state['cleaned_jobs'].index[0]
+            
+            success_list = [s for s, d in scrape_details.items() if d["status"] == "success"]
+            st.session_state['scrape_status']    = f"✅ Found **{len(raw_df)}** job listings from: {', '.join(success_list)}!"
+        else:
+            st.session_state['raw_jobs']         = None
+            st.session_state['cleaned_jobs']     = None
+            st.session_state['selected_job_idx'] = None
+            st.session_state['scrape_status']    = "⚠️ No results found. All selected job boards returned empty or failed."
 
         if st.session_state['scrape_status']:
             msg = st.session_state['scrape_status']
@@ -309,6 +436,48 @@ tab_search, tab_analytics, tab_guide = st.tabs([
 # TAB 1 — JOB BOARD & SEARCH
 # ════════════════════════════════════════════════════════════════════════════════
 with tab_search:
+    # ── Scrape Status Details Dashboard ───────────────────────────────────────
+    if st.session_state.get('scrape_details'):
+        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+        cols = st.columns(len(st.session_state['scrape_details']))
+        for col, (site, details) in zip(cols, st.session_state['scrape_details'].items()):
+            status = details["status"]
+            count = details["count"]
+            msg = details["message"]
+            
+            if status == "success":
+                border_color = "#10B981"  # Emerald
+                bg_gradient = "linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 78, 59, 0.3) 100%)"
+                status_badge = "🟢 Success"
+                badge_color = "#34D399"
+            elif status == "warning":
+                border_color = "#F59E0B"  # Amber
+                bg_gradient = "linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(120, 53, 4, 0.3) 100%)"
+                status_badge = "🟡 Empty"
+                badge_color = "#FBBF24"
+            else:  # error
+                border_color = "#EF4444"  # Rose
+                bg_gradient = "linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(127, 29, 29, 0.3) 100%)"
+                status_badge = "🔴 Blocked / Error"
+                badge_color = "#F87171"
+            
+            with col:
+                st.markdown(f"""
+                <div style="
+                    background: {bg_gradient};
+                    border: 1px solid {border_color};
+                    border-radius: 12px;
+                    padding: 1rem;
+                    height: 100%;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+                ">
+                    <div style="font-weight: 700; font-size: 1.1rem; color: #F1F5F9; margin-bottom: 0.25rem;">{site}</div>
+                    <div style="display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 4px; background: rgba(0,0,0,0.25); color: {badge_color}; margin-bottom: 0.5rem;">{status_badge}</div>
+                    <div style="font-size: 0.85rem; color: #CBD5E1; line-height: 1.3;">{msg}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+
     if not has_data():
         st.markdown("""
         <div style="text-align:center; padding:4rem 2rem; background:#1E293B;
