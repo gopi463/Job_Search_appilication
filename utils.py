@@ -278,10 +278,11 @@ def generate_salary_distribution_chart(df: pd.DataFrame):
 def section_header(title: str, subtitle: str = ""):
     """Renders a styled section header with title and subtitle."""
     import streamlit as st
+    subtitle_html = f'<p style="color: #94A3B8; margin-top: 0; font-size: 1.05rem; font-family: \"Plus Jakarta Sans\", sans-serif;">{subtitle}</p>' if subtitle else ''
     st.markdown(f"""
     <div style="margin-bottom: 2rem;">
         <h2 style="color: #F8FAFC; margin-bottom: 0.25rem; font-family: 'Outfit', sans-serif; font-weight: 700;">{title}</h2>
-        {f'<p style="color: #94A3B8; margin-top: 0; font-size: 1.05rem; font-family: \'Plus Jakarta Sans\', sans-serif;">{subtitle}</p>' if subtitle else ''}
+        {subtitle_html}
         <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 1rem; margin-bottom: 1.5rem;">
     </div>
     """, unsafe_allow_html=True)
