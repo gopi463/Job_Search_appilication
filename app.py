@@ -793,7 +793,7 @@ def page_developer():
             border-radius:15px;padding:24px;text-align:center;box-shadow:0 8px 32px 0 rgba(0,0,0,0.37);">
             <div style="font-size:5rem;margin-bottom:12px;">👨💻</div>
             <h2 style="margin:0;color:#e6edf3;font-size:1.8rem;">Gopi Chand Pasam</h2>
-            <p style="color:#667eea;font-weight:600;margin:4px 0 16px 0;font-size:1.1rem;">Full Stack AI & RAG Engineer</p>
+            <p style="color:#667eea;font-weight:600;margin:4px 0 16px 0;font-size:1.1rem;">Data Analyst & RAG Engineer</p>
             <hr style="border:0;border-top:1px solid rgba(255,255,255,0.1);margin:16px 0;">
             <div style="text-align:left;color:#e6edf3;font-size:0.9rem;">
                 <p>🚀 <strong>Specialization:</strong> Building highly optimized Retrieval-Augmented Generation (RAG) pipelines, analytical assistants, and secure enterprise web apps.</p>
